@@ -10,6 +10,7 @@ A simple Whack a Mole game written with PyGame
 from pygame import init, quit, display, image, transform, time, mixer, mouse, event, Surface, \
     SRCALPHA, QUIT, KEYDOWN, \
     K_q, K_w, K_e, K_a, K_s, K_d, K_z, K_x, K_c, K_1, K_2, K_SPACE, K_ESCAPE
+from gpiozero import Button
 from time import sleep
 from sys import exit
 from .constants import Constants
@@ -46,6 +47,13 @@ class Game:
         # Load lightMatrix
         self.light_matrix = LightMatrix()
 
+        #Load buttons
+        self.buttons = [Button(pin) for pin in Constants.BUTTON_PINS]
+        self.BUTTONS_DOWN = [False] * len(self.buttons)
+
+        for button in self.buttons:
+            button.when_pressed = self.button_pressed
+
         # Load mallet
         self.img_mallet = image.load(Constants.IMAGEMALLET)
         self.img_mallet = transform.scale(self.img_mallet, (Constants.MALLETWIDTH, Constants.MALLETHEIGHT))
@@ -70,6 +78,9 @@ class Game:
         # Run
         if autostart:
             self.run()
+
+    def button_pressed(self, button):
+        self.BUTTONS_DOWN[Constants.BUTTON_PINS.index(button.pin.number)] = True
 
     def reset(self):
         # Load moles
@@ -117,73 +128,38 @@ class Game:
         clicked = False
         pos = -1
 
-        # Handle PyGame events
-        for e in event.get():  #returns a list of all the events that are currently in the event queue. Doing so empties the queue.
+        # Handle game events
+        gameTime, endGame = self.timerData
 
-            if e.type == QUIT:  # Handle quit exit button
-                self.loop = False
-                break
+        if not endGame:
+            try:
+                pos = self.BUTTONS_DOWN.index(True)
+                self.BUTTONS_DOWN[pos] = False
+            except ValueError:
+                pass
 
-            gameTime, endGame = self.timerData
-
-            if not endGame:
-
-                if e.type == KEYDOWN:
-                    if e.key == K_q:
-                        pos = 0
-                    elif e.key == K_w:
-                        pos = 1
-                    elif e.key == K_e:
-                        pos = 2
-                    elif e.key == K_a:
-                        pos = 3
-                    elif e.key == K_s:
-                        pos = 4
-                    elif e.key == K_d:
-                        pos = 5
-                    elif e.key == K_z:
-                        pos = 6
-                    elif e.key == K_x:
-                        pos = 7
-                    elif e.key == K_c:
-                        pos = 8
-
-                    # Start timer if not started
-                    if self.timer is not None and self.timer_start == 0:
-                        self.timer_start = time.get_ticks()
-                    else:
-                        # Handle hit/miss
-                        clicked = True
-                        miss = True
-                        for mole in self.moles:
-                            if mole.is_hit(pos) == 1:  # Hit
-                                hit = True
-                                miss = False
-                            if mole.is_hit(pos) == 2:  # Hit but stunned
-                                miss = False
-                        if hit:
-                            self.score.hit()
-                            effect = mixer.Sound(choice(self.sounds_hit))
-                            effect.play(0)
-                        if miss:
-                            self.score.miss()
-                            effect = mixer.Sound(choice(self.sounds_miss))
-                            effect.play(0)
-
-                if e.type == KEYDOWN:
-
-                    # Allow escape to abort attempt
-                    if e.key == K_ESCAPE:  #to reset
-                        self.reset()
-                        break
-
-
-            # End game screen
-            else:
-                if e.type == KEYDOWN:
-                    if e.key == K_SPACE:    # Restart
-                        self.reset()
-                        break
+            if pos != -1:
+                # Start timer if not started
+                if self.timer is not None and self.timer_start == 0:
+                    self.timer_start = time.get_ticks()
+                else:
+                    # Handle hit/miss
+                    clicked = True
+                    miss = True
+                    for mole in self.moles:
+                        if mole.is_hit(pos) == 1:  # Hit
+                            hit = True
+                            miss = False
+                        if mole.is_hit(pos) == 2:  # Hit but stunned
+                            miss = False
+                    if hit:
+                        self.score.hit()
+                        effect = mixer.Sound(choice(self.sounds_hit))
+                        effect.play(0)
+                    if miss:
+                        self.score.miss()
+                        effect = mixer.Sound(choice(self.sounds_miss))
+                        effect.play(0)
 
         return (clicked, hit, miss)
 
